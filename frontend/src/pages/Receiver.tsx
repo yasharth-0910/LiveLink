@@ -9,7 +9,8 @@ const Receiver: React.FC = () => {
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
 
   useEffect(() => {
-    const socket = new WebSocket('ws://localhost:8080');
+    const socket = new WebSocket('wss://live-link-l2rt.vercel.app');
+
 
     socket.onopen = () => {
       socket.send(JSON.stringify({ type: 'join', role: 'receiver', roomId }));
@@ -59,12 +60,38 @@ const Receiver: React.FC = () => {
     setPeerConnection(pc);
   };
 
+  function endcall() {
+    if (peerConnection) {
+      peerConnection.close();
+    }
+
+    if (webSocket) {
+      webSocket.close();
+    }
+
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
+
+    setPeerConnection(null);
+
+    setTimeout(() => {
+      window.location.href = "/";
+    }, 2000);
+  }
+
   return (
     <div>
       <h1>Receiver's Room: {roomId}</h1>
       <video ref={videoRef} autoPlay playsInline muted style={{ width: '500px', height: '400px', backgroundColor: 'black' }} />
       <br />
       <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '500px', height: '400px', backgroundColor: 'black' }} />
+      <button onClick={endcall}>end call</button>
     </div>
   );
 };

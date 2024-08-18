@@ -11,7 +11,8 @@ const Sender: React.FC = () => {
 
   // Initialize WebSocket connection
   useEffect(() => {
-    const ws = new WebSocket("ws://localhost:8080");
+    const ws = new WebSocket('wss://live-link-l2rt.vercel.app');
+
 
     ws.onopen = () => {
       ws.send(JSON.stringify({ type: "join", roomId, role: "sender" }));

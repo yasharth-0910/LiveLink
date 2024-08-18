@@ -12,7 +12,7 @@ const rooms: Record<string, { sender: WebSocketWithAlive | null; receiver: WebSo
 // Create HTTP server
 const server = http.createServer((req, res) => {
     // Set CORS headers
-    res.setHeader("Access-Control-Allow-Origin", "*"); // Allow all origins for development
+    res.setHeader("Access-Control-Allow-Origin", "*"); // Adjust this for production
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
@@ -71,7 +71,7 @@ wss.on("connection", function connection(ws) {
     let roomId: string;
 
     client.on("error", function error(err) {
-        console.log("WebSocket error:", err);
+        console.error("WebSocket error:", err);
     });
 
     client.on("message", function message(data: any) {
