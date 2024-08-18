@@ -116,5 +116,5 @@ wss.on("connection", function connection(ws) {
 
 // Start both the HTTP and WebSocket servers
 server.listen(8080, () => {
-    console.log("Server and WebSocket are running on http://localhost:8080");
+    console.log("Server and WebSocket are running on http://localhost:8080"); 
 });

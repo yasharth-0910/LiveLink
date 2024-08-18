@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 const Sender: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null); // New ref for remote video
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [status, setStatus] = useState("Waiting for receiver...");
@@ -39,7 +40,7 @@ const Sender: React.FC = () => {
     return () => {
       ws.close();
     };
-  }, [roomId]);
+  }, [roomId, peerConnection]);
 
   // Create PeerConnection and Offer
   const createOffer = async () => {
@@ -62,7 +63,7 @@ const Sender: React.FC = () => {
   useEffect(() => {
     const initWebRTC = async () => {
       try {
-        const constraints = { audio: false, video: true }; // Default video and audio constraints
+        const constraints = { audio: false, video: true }; // Enable both audio and video
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
         if (videoRef.current) {
@@ -74,6 +75,13 @@ const Sender: React.FC = () => {
         });
 
         stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+        // Handle the remote stream received from the receiver
+        pc.ontrack = (event) => {
+          if (remoteVideoRef.current) {
+            remoteVideoRef.current.srcObject = event.streams[0];
+          }
+        };
 
         pc.onicecandidate = (event) => {
           if (event.candidate && webSocket) {
@@ -92,47 +100,45 @@ const Sender: React.FC = () => {
     initWebRTC();
   }, [webSocket]);
 
-  // Poll the status route to check if the receiver is connected
-  useEffect(() => {
-    const checkStatus = async (roomId: string) => {
-      try {
-        const response = await fetch(`http://localhost:8080/room/${roomId}/status`, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          });
-          
-        if (!response.ok) {
-          throw new Error(`Error fetching status: ${response.statusText}`);
-        }
-        const data = await response.json();
-        console.log("Room status:", data);
-        if (data.receiverConnected) {
-          setStatus("Receiver connected!");
-          createOffer();
-        } else {
-          setStatus("Waiting for receiver...");
-        }
-      } catch (error) {
-        console.error("Error fetching status:", error);
-      }
-    };
+  function endCall() {
+    if (peerConnection) {
+      peerConnection.close();
+    }
 
-    const interval = setInterval(() => checkStatus(roomId!), 5000);
-    return () => clearInterval(interval);
-  }, [roomId, peerConnection]);
+    if (webSocket) {
+      webSocket.close();
+    }
 
-return (
-    <div style={{padding: "3px" }}>
-        <h2>Sender</h2>
-        <p style={{ fontSize: "19px" }}>Room Id: {roomId}</p>
-        <p style={{ fontSize: "20px" }}>Status: {status}</p>
-        <video ref={videoRef} autoPlay playsInline muted style={{ width: "600px", height: "500px", backgroundColor: "black" }} />
+    setStatus("Call ended");
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
+
+    setPeerConnection(null);
+
+    setTimeout(() => {
+      window.location.href = "/";
+    }, 2000);
+  }
+  
+
+  return (
+    <div style={{ padding: "3px" }}>
+      <h2>Sender</h2>
+      <p style={{ fontSize: "19px" }}>Room Id: {roomId}</p>
+      <p style={{ fontSize: "20px" }}>Status: {status}</p>
+      <video ref={videoRef} autoPlay playsInline muted style={{ width: "600px", height: "500px", backgroundColor: "black" }} />
         <br />
-        <button style={{ alignSelf: "center"}}> End Call</button>
+      <video ref={remoteVideoRef} autoPlay playsInline style={{ width: "600px", height: "500px", backgroundColor: "black" }} />
+      <br />
+      <button style={{ alignSelf: "center" }} onClick={endCall}>End Call</button>
     </div>
-);
+  );
 };
 
 export default Sender;
