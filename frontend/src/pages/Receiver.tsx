@@ -11,13 +11,14 @@ const Receiver: React.FC = () => {
   useEffect(() => {
     const socket = new WebSocket('wss://live-link-l2rt.vercel.app');
 
-
     socket.onopen = () => {
+      console.log('WebSocket connection established');
       socket.send(JSON.stringify({ type: 'join', role: 'receiver', roomId }));
     };
 
     socket.onmessage = (event) => {
       const data = JSON.parse(event.data);
+      console.log('Received WebSocket message:', data);
 
       if (data.type === 'sender-offer') {
         handleOffer(data.sdp, socket);
@@ -36,28 +37,31 @@ const Receiver: React.FC = () => {
     });
 
     const constraints = { audio: false, video: true };
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      if (videoRef.current) videoRef.current.srcObject = stream;
 
-    if (videoRef.current) videoRef.current.srcObject = stream;
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      pc.onicecandidate = (event) => {
+        if (event.candidate && webSocket) {
+          socket.send(JSON.stringify({ type: 'ice-candidate', candidate: event.candidate }));
+        }
+      };
 
-    pc.onicecandidate = (event) => {
-      if (event.candidate && webSocket) {
-        socket.send(JSON.stringify({ type: 'ice-candidate', candidate: event.candidate }));
-      }
-    };
+      pc.ontrack = (event) => {
+        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = event.streams[0];
+      };
 
-    pc.ontrack = (event) => {
-      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = event.streams[0];
-    };
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
 
-    await pc.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-
-    socket.send(JSON.stringify({ type: 'create-answer', sdp: answer }));
-    setPeerConnection(pc);
+      socket.send(JSON.stringify({ type: 'create-answer', sdp: answer }));
+      setPeerConnection(pc);
+    } catch (error) {
+      console.error('Error handling offer:', error);
+    }
   };
 
   function endcall() {
@@ -68,7 +72,6 @@ const Receiver: React.FC = () => {
     if (webSocket) {
       webSocket.close();
     }
-
 
     if (videoRef.current) {
       videoRef.current.srcObject = null;
