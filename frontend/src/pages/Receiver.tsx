@@ -27,6 +27,10 @@ const Receiver: React.FC = () => {
       }
     };
 
+    socket.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
     setWebSocket(socket);
     return () => socket.close();
   }, [roomId, peerConnection]);
