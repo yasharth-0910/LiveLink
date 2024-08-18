@@ -1,37 +1,20 @@
-import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const Homepage: React.FC = () => {
-  const navigate = useNavigate();
-  const [roomId, setRoomId] = useState("");
+export const Homepage = () => {
 
-  const handleCreateRoom = () => {
-    // Generate a random roomId and navigate to the sender page
-    const generatedRoomId = Math.random().toString(36);
-    navigate(`/sender/${generatedRoomId}`);
-  };
+    const navigate = useNavigate();
 
-  const handleJoinRoom = () => {
-    if (roomId.trim()) {
-      navigate(`/receiver/${roomId}`);
-    }
-  };
+    const start = () => {
+        navigate('/start');
+    };
 
-  return (
-    <div>
-      <h1>Welcome to Video Call App</h1>
-      <button onClick={handleCreateRoom}>Start as Sender</button>
-      <div>
-        <input
-          type="text"
-          placeholder="Enter Room ID"
-          value={roomId}
-          onChange={(e) => setRoomId(e.target.value)}
-        />
-        <button onClick={handleJoinRoom}>Join as Receiver</button>
-      </div>
-    </div>
-  );
-};
-
-export default Homepage;
+    return (
+        <div>
+            <h1>Live Link</h1>
+            <p>Connect With your Loved One, with just a click (well 2 actually), but yeah you get the point</p>
+            <button onClick={start}>
+                start
+            </button>
+        </div>
+    )
+}

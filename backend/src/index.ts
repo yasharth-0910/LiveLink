@@ -1,130 +1,120 @@
-import { WebSocket, WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer } from 'ws';
+import http from 'http';
+import url from 'url';
 
-const wss = new WebSocketServer({ port: 8080 });
+// Extend WebSocket to include the isAlive property
+interface WebSocketWithAlive extends WebSocket {
+    isAlive?: boolean;
+}
 
-// This object will store rooms with an array of participants (WebSockets)
-const rooms: Record<string, { sender: WebSocket | null; receiver: WebSocket | null }> = {};
+const rooms: Record<string, { sender: WebSocketWithAlive | null; receiver: WebSocketWithAlive | null }> = {};
+
+// Create HTTP server
+const server = http.createServer((req, res) => {
+    // Set CORS headers
+    res.setHeader("Access-Control-Allow-Origin", "*"); // Allow all origins for development
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    if (req.method === 'OPTIONS') {
+        res.writeHead(204); // Respond to preflight request with no content
+        res.end();
+        return;
+    }
+
+    const parsedUrl = url.parse(req.url!, true);
+    const path = parsedUrl.pathname;
+
+    if (path?.startsWith("/room/") && path.endsWith("/status")) {
+        const roomId = path.split("/")[2]; // Extract roomId from the URL
+
+        if (rooms[roomId]) {
+            const room = rooms[roomId];
+            const status = {
+                senderConnected: !!room.sender,
+                receiverConnected: !!room.receiver
+            };
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(status));
+        } else {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Room not found' }));
+        }
+    } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not found' }));
+    }
+});
+
+// Create WebSocket server
+const wss = new WebSocketServer({ server });
+
+// Mechanism to check if the connection is alive
+const interval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+        const client = ws as WebSocketWithAlive;
+        if (!client.isAlive) return client.terminate();
+
+        client.isAlive = false;
+        client.ping();
+    });
+}, 30000);
 
 wss.on("connection", function connection(ws) {
-    let roomId: string;
+    const client = ws as WebSocketWithAlive;
+    client.isAlive = true;
 
-    ws.on("error", function error(err) {
-        console.log(err);
+    client.on("pong", () => {
+        client.isAlive = true;
     });
 
-    ws.on("message", function message(data: any) {
+    let roomId: string;
+
+    client.on("error", function error(err) {
+        console.log("WebSocket error:", err);
+    });
+
+    client.on("message", function message(data: any) {
         const message = JSON.parse(data);
+        console.log("Received message:", message);
 
         if (message.type === "join") {
             roomId = message.roomId;
-            
-            // Initialize the room if it doesn't exist
+
             if (!rooms[roomId]) {
                 rooms[roomId] = { sender: null, receiver: null };
             }
 
-            // Assign the socket to the correct role in the room
             if (message.role === "sender") {
-                rooms[roomId].sender = ws;
-                console.log(`Sender joined room ${roomId}`);
+                rooms[roomId].sender = client;
             } else if (message.role === "receiver") {
-                rooms[roomId].receiver = ws;
-                console.log(`Receiver joined room ${roomId}`);
+                rooms[roomId].receiver = client;
             }
 
-        } else if (message.type === "sender-offer") {
-            const receiver = rooms[roomId]?.receiver;
-            if (receiver && ws === rooms[roomId].sender) {
-                console.log("Sending offer to receiver");
-                receiver.send(JSON.stringify({ type: "sender-offer", sdp: message.sdp }));
-            }
-
-        } else if (message.type === "create-answer") {
-            const sender = rooms[roomId]?.sender;
-            if (sender && ws === rooms[roomId].receiver) {
-                console.log("Sending answer to sender");
-                sender.send(JSON.stringify({ type: "create-answer", sdp: message.sdp }));
-            }
-
-        } else if (message.type === "ice-candidate") {
-            const peer = message.role === "sender" ? rooms[roomId]?.receiver : rooms[roomId]?.sender;
-            if (peer) {
-                console.log("Sending ICE candidate to peer");
-                peer.send(JSON.stringify({ type: "ice-candidate", candidate: message.candidate }));
+            // Notify both participants of connection status
+            if (rooms[roomId].sender && rooms[roomId].receiver) {
+                rooms[roomId].sender?.send(JSON.stringify({ type: "status", message: "Receiver connected" }));
+                rooms[roomId].receiver?.send(JSON.stringify({ type: "status", message: "Connected to sender" }));
             }
         }
     });
 
-    ws.on("close", () => {
-        // Remove the socket from the room on disconnect
+    client.on("close", () => {
         if (rooms[roomId]) {
-            if (rooms[roomId].sender === ws) {
+            if (rooms[roomId].sender === client) {
                 rooms[roomId].sender = null;
-            } else if (rooms[roomId].receiver === ws) {
+            } else if (rooms[roomId].receiver === client) {
                 rooms[roomId].receiver = null;
             }
 
-            // Clean up the room if both participants have left
             if (!rooms[roomId].sender && !rooms[roomId].receiver) {
                 delete rooms[roomId];
-                console.log(`Room ${roomId} cleaned up`);
             }
         }
     });
 });
 
-console.log("WebSocket server is running on ws://localhost:8080");
-
-
-
-// import { WebSocket, WebSocketServer } from "ws";
-
-// const wss = new WebSocketServer({ port: 8080 });
-
-// let senderSocket: WebSocket | null = null;
-// let receiverSocket: WebSocket | null = null;
-
-// wss.on("connection", function connection(ws) {
-//     let roomId: string;
-
-//     ws.on("error", function error(err) {
-//         console.log(err);
-//     });
-
-//     ws.on("message", function message(data: any) {
-//         const message = JSON.parse(data);
-
-//         if (message.type === "join") {
-//             roomId = message.roomId;
-//             if (message.role === "sender") {
-//                 senderSocket = ws;
-//                 console.log("Sender joined the room:", roomId);
-//             } else {
-//                 receiverSocket = ws;
-//                 console.log("Receiver joined the room:", roomId);
-//             }
-//         } else if (message.type === "sender-offer") {
-//             if (ws !== senderSocket || !receiverSocket) {
-//                 return;
-//             }
-//             console.log("Sending offer to receiver");
-//             receiverSocket.send(JSON.stringify({ type: "sender-offer", sdp: message.sdp }));
-//         } else if (message.type === "create-answer") {
-//             if (!senderSocket || ws !== receiverSocket) {
-//                 return;
-//             }
-//             console.log("Sending answer to sender");
-//             senderSocket.send(JSON.stringify({ type: "create-answer", sdp: message.sdp }));
-//         } else if (message.type === "ice-candidate") {
-//             if (message.role === "sender" && receiverSocket) {
-//                 console.log("Sending ICE candidate to receiver");
-//                 receiverSocket.send(JSON.stringify({ type: "ice-candidate", candidate: message.candidate }));
-//             } else if (message.role === "receiver" && senderSocket) {
-//                 console.log("Sending ICE candidate to sender");
-//                 senderSocket.send(JSON.stringify({ type: "ice-candidate", candidate: message.candidate }));
-//             }
-//         }
-//     });
-// });
-
-// console.log("WebSocket server is running on ws://localhost:8080");
+// Start both the HTTP and WebSocket servers
+server.listen(8080, () => {
+    console.log("Server and WebSocket are running on http://localhost:8080");
+});
