@@ -63,7 +63,7 @@ const Receiver: React.FC = () => {
   useEffect(() => {
     const initWebRTC = async () => {
       try {
-        const constraints = { audio: true, video: true }; // Enable both audio and video
+        const constraints = { audio: false, video: true }; // Enable both audio and video
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
         if (videoRef.current) {
