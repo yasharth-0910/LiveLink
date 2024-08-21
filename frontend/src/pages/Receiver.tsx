@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
 
 const Receiver: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
@@ -7,68 +7,100 @@ const Receiver: React.FC = () => {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
+  const [status, setStatus] = useState("Waiting for sender...");
 
+  // Initialize WebSocket connection
   useEffect(() => {
-    const socket = new WebSocket('wss://live-link-l2rt.vercel.app');
+    const ws = new WebSocket('wss://backend-server.yasharthsingh0910.workers.dev/ws');
 
-    socket.onopen = () => {
-      console.log('WebSocket connection established');
-      socket.send(JSON.stringify({ type: 'join', role: 'receiver', roomId }));
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: "join", roomId, role: "receiver" }));
     };
 
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      console.log('Received WebSocket message:', data);
+    ws.onmessage = (message) => {
+      const data = JSON.parse(message.data);
+      console.log("Received message:", data);
 
-      if (data.type === 'sender-offer') {
-        handleOffer(data.sdp, socket);
-      } else if (data.type === 'ice-candidate' && data.candidate) {
+      if (data.type === "status" && data.message === "Connected to sender") {
+        setStatus("Connected to sender! Setting up connection...");
+      } else if (data.type === "sender-offer") {
+        handleOffer(data.sdp);
+      } else if (data.type === "ice-candidate" && data.candidate) {
         peerConnection?.addIceCandidate(new RTCIceCandidate(data.candidate));
       }
     };
 
-    socket.onerror = (error) => {
-      console.error('WebSocket error:', error);
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
     };
 
-    setWebSocket(socket);
-    return () => socket.close();
+    setWebSocket(ws);
+
+    return () => {
+      ws.close();
+    };
   }, [roomId, peerConnection]);
 
-  const handleOffer = async (offer: RTCSessionDescriptionInit, socket: WebSocket) => {
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-    });
+  // Handle the offer from sender
+  const handleOffer = async (offer: any) => {
+    if (!peerConnection || !webSocket) return;
 
-    const constraints = { audio: false, video: true };
     try {
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      if (videoRef.current) videoRef.current.srcObject = stream;
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
 
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
-      pc.onicecandidate = (event) => {
-        if (event.candidate && webSocket) {
-          socket.send(JSON.stringify({ type: 'ice-candidate', candidate: event.candidate }));
-        }
-      };
-
-      pc.ontrack = (event) => {
-        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = event.streams[0];
-      };
-
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      socket.send(JSON.stringify({ type: 'create-answer', sdp: answer }));
-      setPeerConnection(pc);
+      // Send the answer to the sender via WebSocket
+      webSocket.send(
+        JSON.stringify({ type: "create-answer", sdp: answer })
+      );
     } catch (error) {
-      console.error('Error handling offer:', error);
+      console.error("Error handling offer:", error);
     }
   };
 
-  function endcall() {
+  // Set up video stream and peer connection
+  useEffect(() => {
+    const initWebRTC = async () => {
+      try {
+        const constraints = { audio: true, video: true }; // Enable both audio and video
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+
+        const pc = new RTCPeerConnection({
+          iceServers: [{ urls: "stun:stun.l.google.com:19302" }], // Google's public STUN server
+        });
+
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+        // Handle the remote stream received from the sender
+        pc.ontrack = (event) => {
+          if (remoteVideoRef.current) {
+            remoteVideoRef.current.srcObject = event.streams[0];
+          }
+        };
+
+        pc.onicecandidate = (event) => {
+          if (event.candidate && webSocket) {
+            webSocket.send(
+              JSON.stringify({ type: "ice-candidate", candidate: event.candidate, role: "receiver" })
+            );
+          }
+        };
+
+        setPeerConnection(pc);
+      } catch (error) {
+        console.error("Error accessing media devices.", error);
+      }
+    };
+
+    initWebRTC();
+  }, [webSocket]);
+
+  function endCall() {
     if (peerConnection) {
       peerConnection.close();
     }
@@ -76,6 +108,8 @@ const Receiver: React.FC = () => {
     if (webSocket) {
       webSocket.close();
     }
+
+    setStatus("Call ended");
 
     if (videoRef.current) {
       videoRef.current.srcObject = null;
@@ -93,12 +127,15 @@ const Receiver: React.FC = () => {
   }
 
   return (
-    <div>
-      <h1>Receiver's Room: {roomId}</h1>
-      <video ref={videoRef} autoPlay playsInline muted style={{ width: '500px', height: '400px', backgroundColor: 'black' }} />
+    <div style={{ padding: "3px" }}>
+      <h2>Receiver</h2>
+      <p style={{ fontSize: "19px" }}>Room Id: {roomId}</p>
+      <p style={{ fontSize: "20px" }}>Status: {status}</p>
+      <video ref={videoRef} autoPlay playsInline muted style={{ width: "600px", height: "500px", backgroundColor: "black" }} />
       <br />
-      <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '500px', height: '400px', backgroundColor: 'black' }} />
-      <button onClick={endcall}>end call</button>
+      <video ref={remoteVideoRef} autoPlay playsInline style={{ width: "600px", height: "500px", backgroundColor: "black" }} />
+      <br />
+      <button style={{ alignSelf: "center" }} onClick={endCall}>End Call</button>
     </div>
   );
 };

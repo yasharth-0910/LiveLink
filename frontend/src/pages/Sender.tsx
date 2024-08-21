@@ -4,15 +4,14 @@ import { useParams } from "react-router-dom";
 const Sender: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null); // New ref for remote video
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [status, setStatus] = useState("Waiting for receiver...");
 
   // Initialize WebSocket connection
   useEffect(() => {
-    const ws = new WebSocket('wss://live-link-l2rt.vercel.app');
-
+    const ws = new WebSocket('wss://backend-server.yasharthsingh0910.workers.dev/ws');
 
     ws.onopen = () => {
       ws.send(JSON.stringify({ type: "join", roomId, role: "sender" }));
@@ -64,7 +63,7 @@ const Sender: React.FC = () => {
   useEffect(() => {
     const initWebRTC = async () => {
       try {
-        const constraints = { audio: false, video: true }; // Enable both audio and video
+        const constraints = { audio: true, video: true }; // Enable both audio and video
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
         if (videoRef.current) {
@@ -126,7 +125,6 @@ const Sender: React.FC = () => {
       window.location.href = "/";
     }, 2000);
   }
-  
 
   return (
     <div style={{ padding: "3px" }}>
@@ -134,7 +132,7 @@ const Sender: React.FC = () => {
       <p style={{ fontSize: "19px" }}>Room Id: {roomId}</p>
       <p style={{ fontSize: "20px" }}>Status: {status}</p>
       <video ref={videoRef} autoPlay playsInline muted style={{ width: "600px", height: "500px", backgroundColor: "black" }} />
-        <br />
+      <br />
       <video ref={remoteVideoRef} autoPlay playsInline style={{ width: "600px", height: "500px", backgroundColor: "black" }} />
       <br />
       <button style={{ alignSelf: "center" }} onClick={endCall}>End Call</button>
