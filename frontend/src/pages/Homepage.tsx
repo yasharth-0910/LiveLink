@@ -9,6 +9,14 @@ const Homepage = () => {
         navigate('/start');
     };
 
+    const price = () => {
+        navigate('/price');
+    };
+
+    const contact = () => {
+        navigate('/contact');
+    };
+
     return (
         <div className="min-h-screen flex flex-col bg-gray-900 text-gray-100">
             <header className="bg-gray-800/50 backdrop-blur-md border-b border-gray-700">
@@ -20,8 +28,8 @@ const Homepage = () => {
                     <nav>
                         <ul className="flex space-x-6">
                             <li><a href="#" className="text-gray-300 hover:text-cyan-400 transition-colors duration-300">Features</a></li>
-                            <li><a href="/price" className="text-gray-300 hover:text-cyan-400 transition-colors duration-300">Pricing</a></li>
-                            <li><a href="/contact" className="text-gray-300 hover:text-cyan-400 transition-colors duration-300" >Contact</a></li>
+                            <li><a onClick={price} className="text-gray-300 hover:text-cyan-400 transition-colors duration-300">Pricing</a></li>
+                            <li><a onClick={contact} className="text-gray-300 hover:text-cyan-400 transition-colors duration-300" >Contact</a></li>
                         </ul>
                     </nav>
                 </div>
