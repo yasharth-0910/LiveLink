@@ -1,7 +1,24 @@
 import {  CheckCircle, Video } from 'lucide-react';
 import "../index.css";
+import Loader from '../components/Loader';
+import { useEffect, useState } from 'react';
 
 const Pricing = (): JSX.Element => {
+
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setLoading(false);
+        }, 2000); // Display loader for 2 seconds
+
+        return () => clearTimeout(timer);
+    }, []);
+
+    if (loading) {
+        return <Loader />;
+    }
+
     return (
         <div className="h-screen bg-gray-900 text-gray-100">
             <header className="bg-gray-800/50 backdrop-blur-md border-b border-gray-700">
@@ -21,12 +38,12 @@ const Pricing = (): JSX.Element => {
                         { 
                             title: "Starter", 
                             price: "Free", 
-                            features: ["Holographic Video*", "1 Dimension Support", "Quantum Reach Lite*", "One to One"] 
+                            features: ["Under-Development","Holographic Video*", "1 Dimension Support", "Quantum Reach Lite*", "One to One"] 
                         },
                         { 
                             title: "Professional", 
                             price: "$19", 
-                            features: ["Holographic Video*", "Multi-Dimensional Calls*", "Quantum Reach*", "One to One"] 
+                            features: ["Under-Development","Holographic Video*", "Multi-Dimensional Calls*", "Quantum Reach*", "One to One"] 
                         },
                         { 
                             title: "Enterprise", 

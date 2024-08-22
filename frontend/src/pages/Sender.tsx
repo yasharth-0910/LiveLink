@@ -8,6 +8,10 @@ const Sender: React.FC = () => {
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [status, setStatus] = useState("Waiting for receiver...");
+  const [micOn, setMicOn] = useState(false); // Microphone state
+  const [cameraOn, setCameraOn] = useState(true); // Camera state
+  const [remoteMuted, setRemoteMuted] = useState(false); // Remote mute state
+  const [stream, setStream] = useState<MediaStream | null>(null); // Media stream
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -60,45 +64,91 @@ const Sender: React.FC = () => {
   };
 
   // Set up video stream and peer connection
-  useEffect(() => {
-    const initWebRTC = async () => {
-      try {
-        const constraints = { audio: false, video: true }; // Enable both audio and video
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+  const initWebRTC = async () => {
+    try {
+      if (stream) {
+        // Stop existing tracks to switch cameras
+        stream.getTracks().forEach((track) => track.stop());
+      }
 
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
+      const constraints = { audio: micOn, video: cameraOn }; // Control mic and camera
+      const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      setStream(newStream);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = newStream;
+      }
+
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }], // Google's public STUN server
+      });
+
+      newStream.getTracks().forEach((track) => pc.addTrack(track, newStream));
+
+      // Handle the remote stream received from the receiver
+      pc.ontrack = (event) => {
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+        }
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate && webSocket) {
+          webSocket.send(
+            JSON.stringify({ type: "ice-candidate", candidate: event.candidate, role: "sender" })
+          );
+        }
+      };
+
+      setPeerConnection(pc);
+    } catch (error) {
+      console.error("Error accessing media devices.", error);
+    }
+  };
+
+  // Handle mic and camera state changes
+  useEffect(() => {
+    if (peerConnection) {
+      // Update tracks based on new mic and camera states
+      if (stream) {
+        const audioTrack = stream.getAudioTracks()[0];
+        const videoTrack = stream.getVideoTracks()[0];
+
+        if (audioTrack) {
+          audioTrack.enabled = micOn;
         }
 
-        const pc = new RTCPeerConnection({
-          iceServers: [{ urls: "stun:stun.l.google.com:19302" }], // Google's public STUN server
-        });
-
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
-        // Handle the remote stream received from the receiver
-        pc.ontrack = (event) => {
-          if (remoteVideoRef.current) {
-            remoteVideoRef.current.srcObject = event.streams[0];
-          }
-        };
-
-        pc.onicecandidate = (event) => {
-          if (event.candidate && webSocket) {
-            webSocket.send(
-              JSON.stringify({ type: "ice-candidate", candidate: event.candidate, role: "sender" })
-            );
-          }
-        };
-
-        setPeerConnection(pc);
-      } catch (error) {
-        console.error("Error accessing media devices.", error);
+        if (videoTrack) {
+          videoTrack.enabled = cameraOn;
+        }
       }
-    };
 
+      // Optionally reinitialize the WebRTC connection if necessary
+      initWebRTC();
+    }
+  }, [micOn, cameraOn, peerConnection]);
+
+  useEffect(() => {
     initWebRTC();
   }, [webSocket]);
+
+  // Toggle microphone
+  const toggleMic = () => {
+    setMicOn((prev) => !prev);
+  };
+
+  // Toggle camera
+  const toggleCamera = () => {
+    setCameraOn((prev) => !prev);
+  };
+
+  // Mute remote video
+  const toggleRemoteMute = () => {
+    setRemoteMuted((prev) => !prev);
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.muted = !remoteMuted;
+    }
+  };
 
   function endCall() {
     if (peerConnection) {
@@ -120,6 +170,7 @@ const Sender: React.FC = () => {
     }
 
     setPeerConnection(null);
+    setStream(null);
 
     setTimeout(() => {
       window.location.href = "/";
@@ -136,15 +187,36 @@ const Sender: React.FC = () => {
           ref={videoRef}
           autoPlay
           playsInline
-          muted
+          muted={!micOn}
           className="w-96 h-64 bg-black rounded-lg shadow-lg"
         />
         <video
           ref={remoteVideoRef}
           autoPlay
           playsInline
+          muted={remoteMuted}
           className="w-96 h-64 bg-black rounded-lg shadow-lg"
         />
+      </div>
+      <div className="flex space-x-4 mt-6">
+        <button
+          onClick={toggleMic}
+          className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors duration-300"
+        >
+          {micOn ? "Turn Off Mic" : "Turn On Mic"}
+        </button>
+        <button
+          onClick={toggleCamera}
+          className="px-6 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors duration-300"
+        >
+          {cameraOn ? "Turn Off Camera" : "Turn On Camera"}
+        </button>
+        <button
+          onClick={toggleRemoteMute}
+          className="px-6 py-2 bg-yellow-600 text-white font-semibold rounded-lg hover:bg-yellow-700 transition-colors duration-300"
+        >
+          {remoteMuted ? "Unmute Remote" : "Mute Remote"}
+        </button>
       </div>
       <button
         onClick={endCall}

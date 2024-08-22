@@ -1,21 +1,35 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Video, Users } from "lucide-react";
+import Loader from '../components/Loader';
 
 export default function Component() {
   const [roomId, setRoomId] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleStartRoom = () => {
+    setLoading(true);
     const newRoomId = Math.random().toString(36).substring(2, 10);
-    navigate(`/sender/${newRoomId}`);
+    setTimeout(() => {
+      setLoading(false);
+      navigate(`/sender/${newRoomId}`);
+    }, 2000); // 2-second delay for loader
   };
 
   const handleJoinRoom = () => {
     if (roomId.trim()) {
-      navigate(`/receiver/${roomId}`);
+      setLoading(true);
+      setTimeout(() => {
+        setLoading(false);
+        navigate(`/receiver/${roomId}`);
+      }, 2000); // 2-second delay for loader
     }
   };
+
+  if (loading) {
+    return <Loader />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-900 to-black text-white">

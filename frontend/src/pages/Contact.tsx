@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { Video, Mail, Phone, MapPin, Send, Github, Twitter, Linkedin } from 'lucide-react';
 import emailjs from '@emailjs/browser';
+import Loader from '../components/Loader';
 
 const Contact = (): JSX.Element => {
+
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',

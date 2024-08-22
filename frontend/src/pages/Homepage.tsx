@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Video, Users, Globe, Shield, Zap, ChevronRight, } from 'lucide-react';
+import { Video, Users, Globe, Shield, Zap, ChevronRight } from 'lucide-react';
 import "../index.css";
+import Loader from '../components/Loader'; // Import your Loader component
 
 const Homepage = () => {
+    const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
     const start = () => {
@@ -14,8 +17,16 @@ const Homepage = () => {
     };
 
     const contact = () => {
-        navigate('/contact');
+        setLoading(true); // Set loading to true before navigation
+        setTimeout(() => {
+            navigate('/contact');
+            setLoading(false); // Hide loading spinner after navigation
+        }, 2000); // Display loader for 2 seconds
     };
+
+    if (loading) {
+        return <Loader />;
+    }
 
     return (
         <div className="min-h-screen flex flex-col bg-gray-900 text-gray-100">
@@ -26,11 +37,23 @@ const Homepage = () => {
                         <span className="ml-2 text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">LiveLink</span>
                     </div>
                     <nav>
-                        <ul className="flex space-x-6">
-                            <li><a href="#" className="text-gray-300 hover:text-cyan-400 transition-colors duration-300">Features</a></li>
-                            <li><a onClick={price} className="text-gray-300 hover:text-cyan-400 transition-colors duration-300">Pricing</a></li>
-                            <li><a onClick={contact} className="text-gray-300 hover:text-cyan-400 transition-colors duration-300" >Contact</a></li>
-                        </ul>
+                    <ul className="flex space-x-6">
+                        <li>
+                            <a href="#" className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 cursor-pointer">
+                                Features
+                            </a>
+                        </li>
+                        <li>
+                            <a onClick={price} className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 cursor-pointer">
+                                Pricing
+                            </a>
+                        </li>
+                        <li>
+                            <a onClick={contact} className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 cursor-pointer">
+                                Contact
+                            </a>
+                        </li>
+                    </ul>
                     </nav>
                 </div>
             </header>
@@ -108,12 +131,12 @@ const Homepage = () => {
             <footer className="bg-gray-800 border-t border-gray-700">
                 <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
                     <p className="text-center text-sm text-gray-400">
-                        © 2024 LiveLink.(Some features are not available bcoz website is under Development) , *Features are not real
+                        © 2024 LiveLink. (Some features are not available because the website is under Development), *Features are not real
                     </p>
                 </div>
             </footer>
         </div>
-    )
+    );
 }
 
 export default Homepage;
