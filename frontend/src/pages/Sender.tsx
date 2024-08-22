@@ -127,15 +127,31 @@ const Sender: React.FC = () => {
   }
 
   return (
-    <div style={{ padding: "3px" }}>
-      <h2>Sender</h2>
-      <p style={{ fontSize: "19px" }}>Room Id: {roomId}</p>
-      <p style={{ fontSize: "20px" }}>Status: {status}</p>
-      <video ref={videoRef} autoPlay playsInline muted style={{ width: "600px", height: "500px", backgroundColor: "black" }} />
-      <br />
-      <video ref={remoteVideoRef} autoPlay playsInline style={{ width: "600px", height: "500px", backgroundColor: "black" }} />
-      <br />
-      <button style={{ alignSelf: "center" }} onClick={endCall}>End Call</button>
+    <div className="flex flex-col items-center justify-center p-6 text-white bg-gray-900 min-h-screen">
+      <h2 className="text-3xl font-bold mb-4 text-teal-400">Sender</h2>
+      <p className="text-lg mb-2 text-gray-300">Room Id: {roomId}</p>
+      <p className="text-lg mb-4 text-gray-300">Status: {status}</p>
+      <div className="flex space-x-4">
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-96 h-64 bg-black rounded-lg shadow-lg"
+        />
+        <video
+          ref={remoteVideoRef}
+          autoPlay
+          playsInline
+          className="w-96 h-64 bg-black rounded-lg shadow-lg"
+        />
+      </div>
+      <button
+        onClick={endCall}
+        className="mt-6 px-6 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors duration-300"
+      >
+        End Call
+      </button>
     </div>
   );
 };
