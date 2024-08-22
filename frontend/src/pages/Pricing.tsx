@@ -1,4 +1,4 @@
-import { DollarSign, CheckCircle, Video } from 'lucide-react';
+import {  CheckCircle, Video } from 'lucide-react';
 import "../index.css";
 
 const Pricing = (): JSX.Element => {
