@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Video, Users, Globe, Shield, Zap, ChevronRight } from 'lucide-react';
 import "../index.css";
 import Loader from '../components/Loader'; // Import your Loader component
+import { v4 as uuidv4 } from 'uuid'; // Import the UUID library
 
 const Homepage = () => {
     const [loading, setLoading] = useState(false);
@@ -24,6 +25,11 @@ const Homepage = () => {
         }, 2000); // Display loader for 2 seconds
     };
 
+    const joinVideoConference = () => {
+        const roomId = uuidv4(); // Generate a unique room ID
+        navigate(`/video-conference/${roomId}`);
+    };
+
     if (loading) {
         return <Loader />;
     }
@@ -37,27 +43,32 @@ const Homepage = () => {
                         <span className="ml-2 text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">LiveLink</span>
                     </div>
                     <nav>
-                    <ul className="flex space-x-6">
-                        <li>
-                            <a href="#" className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 cursor-pointer">
-                                Features
-                            </a>
-                        </li>
-                        <li>
-                            <a onClick={price} className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 cursor-pointer">
-                                Pricing
-                            </a>
-                        </li>
-                        <li>
-                            <a onClick={contact} className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 cursor-pointer">
-                                Contact
-                            </a>
-                        </li>
-                    </ul>
+                        <ul className="flex space-x-6">
+                            <li>
+                                <a href="#" className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 cursor-pointer">
+                                    Features
+                                </a>
+                            </li>
+                            <li>
+                                <a onClick={price} className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 cursor-pointer">
+                                    Pricing
+                                </a>
+                            </li>
+                            <li>
+                                <a onClick={contact} className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 cursor-pointer">
+                                    Contact
+                                </a>
+                            </li>
+                            <li>
+                                <a onClick={joinVideoConference} className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 cursor-pointer">
+                                    Video Conference
+                                </a>
+                            </li>
+                        </ul>
                     </nav>
                 </div>
             </header>
-
+            
             <main className="flex-grow">
                 <section className="py-20 relative overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-r from-blue-900/20 to-purple-900/20 animate-pulse"></div>

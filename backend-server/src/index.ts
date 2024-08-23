@@ -9,6 +9,7 @@ const rooms: Record<string, Room> = {};
 
 const app = new Hono();
 
+// Middleware to handle CORS
 app.use('*', async (c, next) => {
   c.header('Access-Control-Allow-Origin', '*');
   c.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -16,6 +17,7 @@ app.use('*', async (c, next) => {
   await next();
 });
 
+// Endpoint to check room status
 app.get('/room/:roomId/status', (c) => {
   const roomId = c.req.param('roomId');
   const room = rooms[roomId];
@@ -30,6 +32,7 @@ app.get('/room/:roomId/status', (c) => {
   }
 });
 
+// WebSocket endpoint
 app.all('/ws', async (c) => {
   if (c.req.header('Upgrade') !== 'websocket') {
     return c.text('Expected WebSocket', 400);
@@ -42,6 +45,7 @@ app.all('/ws', async (c) => {
   server.accept(); // Accept the WebSocket connection
   let roomId: string;
 
+  // Handle incoming WebSocket messages
   server.addEventListener('message', async (event: MessageEvent) => {
     const message = typeof event.data === 'string' ? JSON.parse(event.data) : null;
     console.log('Received message:', message);
@@ -76,6 +80,7 @@ app.all('/ws', async (c) => {
     }
   });
 
+  // Handle WebSocket connection close
   server.addEventListener('close', () => {
     if (rooms[roomId]) {
       if (rooms[roomId].sender === server) {

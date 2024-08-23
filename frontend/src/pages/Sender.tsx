@@ -8,23 +8,24 @@ const Sender: React.FC = () => {
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [status, setStatus] = useState("Waiting for receiver...");
-  const [micOn, setMicOn] = useState(false); // Microphone state
-  const [cameraOn, setCameraOn] = useState(true); // Camera state
-  const [remoteMuted, setRemoteMuted] = useState(false); // Remote mute state
-  const [stream, setStream] = useState<MediaStream | null>(null); // Media stream
+  const [micOn, setMicOn] = useState(false);
+  const [cameraOn, setCameraOn] = useState(true);
+  const [remoteMuted, setRemoteMuted] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
 
-  // Initialize WebSocket connection
-  useEffect(() => {
-    const ws = new WebSocket('wss://backend-server.yasharthsingh0910.workers.dev/ws');
-
+  const createWebSocket = () => {
+    if (webSocket) {
+      return;
+    }
+    const ws = new WebSocket('ws://127.0.0.1:8787/ws');
     ws.onopen = () => {
+      console.log('WebSocket connection established');
       ws.send(JSON.stringify({ type: "join", roomId, role: "sender" }));
     };
-
     ws.onmessage = (message) => {
       const data = JSON.parse(message.data);
       console.log("Received message:", data);
-
       if (data.type === "status" && data.message === "Receiver connected") {
         setStatus("Receiver connected! Setting up connection...");
         createOffer();
@@ -34,17 +35,29 @@ const Sender: React.FC = () => {
         peerConnection?.addIceCandidate(new RTCIceCandidate(data.candidate));
       }
     };
-
     ws.onerror = (error) => {
       console.error("WebSocket error:", error);
     };
-
-    setWebSocket(ws);
-
-    return () => {
-      ws.close();
+    ws.onclose = () => {
+      console.log('WebSocket connection closed, retrying...');
+      setWebSocket(null);
+      setWsConnected(false);
+      setTimeout(createWebSocket, 1000);
     };
-  }, [roomId, peerConnection]);
+    setWebSocket(ws);
+  };
+
+  useEffect(() => {
+    if (!webSocket && !wsConnected) {
+      createWebSocket();
+      setWsConnected(true);
+    }
+    return () => {
+      if (webSocket) {
+        webSocket.close();
+      }
+    };
+  }, []);
 
   // Create PeerConnection and Offer
   const createOffer = async () => {
@@ -65,6 +78,11 @@ const Sender: React.FC = () => {
 
   // Set up video stream and peer connection
   const initWebRTC = async () => {
+    if (peerConnection) {
+      // Reuse the existing PeerConnection
+      return;
+    }
+
     try {
       if (stream) {
         // Stop existing tracks to switch cameras
@@ -153,13 +171,18 @@ const Sender: React.FC = () => {
   function endCall() {
     if (peerConnection) {
       peerConnection.close();
+      setPeerConnection(null);
     }
 
     if (webSocket) {
       webSocket.close();
+      setWebSocket(null);
     }
 
-    setStatus("Call ended");
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+    }
 
     if (videoRef.current) {
       videoRef.current.srcObject = null;
@@ -169,9 +192,9 @@ const Sender: React.FC = () => {
       remoteVideoRef.current.srcObject = null;
     }
 
-    setPeerConnection(null);
-    setStream(null);
-
+    setStatus("Call ended");
+    
+    // Optionally, you can delay the navigation
     setTimeout(() => {
       window.location.href = "/";
     }, 2000);

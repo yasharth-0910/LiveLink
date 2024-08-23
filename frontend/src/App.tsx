@@ -7,6 +7,7 @@ import Receiver from './pages/Receiver';
 import Contact from './pages/Contact';
 import "./index.css";
 import Pricing from './pages/Pricing';
+import VideoConference from './pages/VideoConference';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
         <Route path="/receiver/:roomId" element={<Receiver />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/price" element={<Pricing />} />
+        <Route path="/video-conference/:roomId" element={<VideoConference />} />
       </Routes>
     </BrowserRouter>
   );
