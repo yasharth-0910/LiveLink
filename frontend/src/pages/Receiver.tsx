@@ -18,18 +18,19 @@ const Receiver: React.FC = () => {
   useEffect(() => {
     const createWebSocket = () => {
       if (webSocket) return;
-
+  
       const ws = new WebSocket('wss://backend-server.yasharthsingh0910.workers.dev/ws');
-
+  
       ws.onopen = () => {
         console.log('WebSocket connection established');
         ws.send(JSON.stringify({ type: "join", roomId, role: "receiver" }));
+        setWsConnected(true); // Set connection status
       };
-
+  
       ws.onmessage = (message) => {
         const data = JSON.parse(message.data);
         console.log("Received message:", data);
-
+  
         if (data.type === "status" && data.message === "Connected to sender") {
           setStatus("Connected to sender! Setting up connection...");
         } else if (data.type === "sender-offer") {
@@ -38,29 +39,30 @@ const Receiver: React.FC = () => {
           peerConnection?.addIceCandidate(new RTCIceCandidate(data.candidate));
         }
       };
-
+  
       ws.onerror = (error) => {
         console.error("WebSocket error:", error);
       };
-
+  
       ws.onclose = () => {
         console.log('WebSocket connection closed, retrying...');
         setWebSocket(null);
-        setWsConnected(false);
+        setWsConnected(false); // Update connection status
         setTimeout(createWebSocket, 1000);
       };
-
+  
       setWebSocket(ws);
     };
-
+  
     createWebSocket();
-
+  
     return () => {
       if (webSocket) {
         webSocket.close();
       }
     };
   }, [roomId, peerConnection]);
+  
 
   // Handle the incoming offer from the sender
   const handleOffer = async (sdp: RTCSessionDescriptionInit) => {
@@ -207,6 +209,9 @@ const Receiver: React.FC = () => {
       <h2 className="text-3xl font-bold mb-4 text-teal-400">Receiver</h2>
       <p className="text-lg mb-2 text-gray-300">Room Id: {roomId}</p>
       <p className="text-lg mb-4 text-gray-300">Status: {status}</p>
+      <p className="text-lg mb-4 text-gray-300">
+        WebSocket Status: {wsConnected ? "Connected" : "Disconnected"}
+      </p>
       <div className="flex space-x-4">
         <video
           ref={remoteVideoRef}
@@ -251,6 +256,7 @@ const Receiver: React.FC = () => {
       </button>
     </div>
   );
+  
 };
 
 export default Receiver;
