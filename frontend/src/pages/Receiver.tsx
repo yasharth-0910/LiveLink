@@ -8,40 +8,57 @@ const Receiver: React.FC = () => {
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [status, setStatus] = useState("Waiting for sender...");
-  const [micOn, setMicOn] = useState(false); // Microphone state
-  const [cameraOn, setCameraOn] = useState(true); // Camera state
-  const [remoteMuted, setRemoteMuted] = useState(false); // Remote mute state
-  const [stream, setStream] = useState<MediaStream | null>(null); // Media stream
+  const [micOn, setMicOn] = useState(false);
+  const [cameraOn, setCameraOn] = useState(true);
+  const [remoteMuted, setRemoteMuted] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
 
   // Initialize WebSocket connection
   useEffect(() => {
-    const ws = new WebSocket('wss://backend-server.yasharthsingh0910.workers.dev/ws');
+    const createWebSocket = () => {
+      if (webSocket) return;
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: "join", roomId, role: "receiver" }));
+      const ws = new WebSocket('wss://backend-server.yasharthsingh0910.workers.dev/ws');
+
+      ws.onopen = () => {
+        console.log('WebSocket connection established');
+        ws.send(JSON.stringify({ type: "join", roomId, role: "receiver" }));
+      };
+
+      ws.onmessage = (message) => {
+        const data = JSON.parse(message.data);
+        console.log("Received message:", data);
+
+        if (data.type === "status" && data.message === "Connected to sender") {
+          setStatus("Connected to sender! Setting up connection...");
+        } else if (data.type === "sender-offer") {
+          handleOffer(data.sdp);
+        } else if (data.type === "ice-candidate" && data.candidate) {
+          peerConnection?.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket connection closed, retrying...');
+        setWebSocket(null);
+        setWsConnected(false);
+        setTimeout(createWebSocket, 1000);
+      };
+
+      setWebSocket(ws);
     };
 
-    ws.onmessage = (message) => {
-      const data = JSON.parse(message.data);
-      console.log("Received message:", data);
-
-      if (data.type === "status" && data.message === "Connected to sender") {
-        setStatus("Connected to sender! Setting up connection...");
-      } else if (data.type === "sender-offer") {
-        handleOffer(data.sdp);
-      } else if (data.type === "ice-candidate" && data.candidate) {
-        peerConnection?.addIceCandidate(new RTCIceCandidate(data.candidate));
-      }
-    };
-
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
-
-    setWebSocket(ws);
+    createWebSocket();
 
     return () => {
-      ws.close();
+      if (webSocket) {
+        webSocket.close();
+      }
     };
   }, [roomId, peerConnection]);
 
@@ -65,10 +82,7 @@ const Receiver: React.FC = () => {
 
   // Set up video stream and peer connection
   const initWebRTC = async () => {
-    if (peerConnection) {
-      // Reuse the existing PeerConnection
-      return;
-    }
+    if (peerConnection) return; // Reuse the existing PeerConnection
 
     try {
       if (stream) {
@@ -155,7 +169,8 @@ const Receiver: React.FC = () => {
     }
   };
 
-  function endCall() {
+  // End call and clean up
+  const endCall = () => {
     if (peerConnection) {
       peerConnection.close();
       setPeerConnection(null);
@@ -185,7 +200,7 @@ const Receiver: React.FC = () => {
     setTimeout(() => {
       window.location.href = "/";
     }, 2000);
-  }
+  };
 
   return (
     <div className="flex flex-col items-center justify-center p-6 text-white bg-gray-900 min-h-screen">
@@ -207,7 +222,6 @@ const Receiver: React.FC = () => {
           muted={!micOn}
           className="w-96 h-64 bg-black rounded-lg shadow-lg"
         />
-
       </div>
       <div className="flex space-x-4 mt-6">
         <button
