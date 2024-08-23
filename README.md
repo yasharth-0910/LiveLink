@@ -35,8 +35,8 @@ Typescript
 
 ```bash
     cd backend
-    tsc -b
-    node dist/index.js
+    npm run dev
+    copy the Backend url and paste that on both Receiver and Sender.tsx
 ```
 
 4. **Start Fronted**

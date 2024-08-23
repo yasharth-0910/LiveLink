@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import {Video, Mic, MicOff, Camera, CameraOff, Volume2, VolumeX, PhoneOff, Users } from 'lucide-react';
+import { Video, Mic, MicOff, Camera, CameraOff, Volume2, VolumeX, PhoneOff, Users, Monitor, StopCircle } from 'lucide-react';
 
 const Sender: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
@@ -14,6 +14,7 @@ const Sender: React.FC = () => {
   const [remoteMuted, setRemoteMuted] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
 
   const createWebSocket = () => {
     if (webSocket) {
@@ -60,38 +61,35 @@ const Sender: React.FC = () => {
     };
   }, []);
 
-  // Create PeerConnection and Offer
   const createOffer = async () => {
     if (!peerConnection || !webSocket) return;
 
     try {
       const offer = await peerConnection.createOffer();
       await peerConnection.setLocalDescription(offer);
-
-      // Send the offer to the receiver via WebSocket
-      webSocket.send(
-        JSON.stringify({ type: "sender-offer", sdp: offer })
-      );
+      webSocket.send(JSON.stringify({ type: "sender-offer", sdp: offer }));
     } catch (error) {
       console.error("Error creating offer:", error);
     }
   };
 
-  // Set up video stream and peer connection
   const initWebRTC = async () => {
     if (peerConnection) {
-      // Reuse the existing PeerConnection
       return;
     }
 
     try {
       if (stream) {
-        // Stop existing tracks to switch cameras
         stream.getTracks().forEach((track) => track.stop());
       }
 
-      const constraints = { audio: micOn, video: cameraOn }; // Control mic and camera
-      const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      let newStream;
+      if (isScreenSharing) {
+        newStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      } else {
+        const constraints = { audio: micOn, video: cameraOn };
+        newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      }
       setStream(newStream);
 
       if (videoRef.current) {
@@ -99,12 +97,11 @@ const Sender: React.FC = () => {
       }
 
       const pc = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }], // Google's public STUN server
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       });
 
       newStream.getTracks().forEach((track) => pc.addTrack(track, newStream));
 
-      // Handle the remote stream received from the receiver
       pc.ontrack = (event) => {
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = event.streams[0];
@@ -113,22 +110,19 @@ const Sender: React.FC = () => {
 
       pc.onicecandidate = (event) => {
         if (event.candidate && webSocket) {
-          webSocket.send(
-            JSON.stringify({ type: "ice-candidate", candidate: event.candidate, role: "sender" })
-          );
+          webSocket.send(JSON.stringify({ type: "ice-candidate", candidate: event.candidate, role: "sender" }));
         }
       };
 
       setPeerConnection(pc);
     } catch (error) {
       console.error("Error accessing media devices.", error);
+      setIsScreenSharing(false);
     }
   };
 
-  // Handle mic and camera state changes
   useEffect(() => {
     if (peerConnection) {
-      // Update tracks based on new mic and camera states
       if (stream) {
         const audioTrack = stream.getAudioTracks()[0];
         const videoTrack = stream.getVideoTracks()[0];
@@ -141,31 +135,55 @@ const Sender: React.FC = () => {
           videoTrack.enabled = cameraOn;
         }
       }
-
-      // Optionally reinitialize the WebRTC connection if necessary
       initWebRTC();
     }
-  }, [micOn, cameraOn, peerConnection]);
+  }, [micOn, cameraOn, isScreenSharing, peerConnection]);
 
   useEffect(() => {
     initWebRTC();
   }, [webSocket]);
 
-  // Toggle microphone
-  const toggleMic = () => {
-    setMicOn((prev) => !prev);
-  };
+  const toggleMic = () => setMicOn((prev) => !prev);
+  const toggleCamera = () => setCameraOn((prev) => !prev);
 
-  // Toggle camera
-  const toggleCamera = () => {
-    setCameraOn((prev) => !prev);
-  };
-
-  // Mute remote video
   const toggleRemoteMute = () => {
     setRemoteMuted((prev) => !prev);
     if (remoteVideoRef.current) {
       remoteVideoRef.current.muted = !remoteMuted;
+    }
+  };
+
+  const toggleScreenShare = async () => {
+    if (isScreenSharing) {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      setIsScreenSharing(false);
+    } else {
+      try {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        setStream(screenStream);
+        if (videoRef.current) {
+          videoRef.current.srcObject = screenStream;
+        }
+        setIsScreenSharing(true);
+
+        screenStream.getVideoTracks()[0].onended = () => {
+          setIsScreenSharing(false);
+          initWebRTC();
+        };
+
+        if (peerConnection) {
+          const senders = peerConnection.getSenders();
+          const videoSender = senders.find(sender => sender.track?.kind === 'video');
+          if (videoSender) {
+            videoSender.replaceTrack(screenStream.getVideoTracks()[0]);
+          }
+        }
+      } catch (error) {
+        console.error("Error starting screen share:", error);
+        setIsScreenSharing(false);
+      }
     }
   };
 
@@ -195,7 +213,6 @@ const Sender: React.FC = () => {
 
     setStatus("Call ended");
     
-    // Optionally, you can delay the navigation
     setTimeout(() => {
       window.location.href = "/";
     }, 2000);
@@ -227,7 +244,7 @@ const Sender: React.FC = () => {
               className="w-full h-full bg-gray-800 rounded-lg shadow-lg object-cover"
             />
             <div className="absolute bottom-2 left-2 bg-gray-900/70 px-2 py-1 rounded-md text-sm">
-              You
+              You {isScreenSharing && "(Screen)"}
             </div>
           </div>
           <div className="relative flex-grow min-h-0">
@@ -262,6 +279,14 @@ const Sender: React.FC = () => {
             }`}
           >
             {cameraOn ? <Camera className="h-6 w-6" /> : <CameraOff className="h-6 w-6" />}
+          </button>
+          <button
+            onClick={toggleScreenShare}
+            className={`p-3 rounded-full flex items-center justify-center transition-all duration-300 ${
+              isScreenSharing ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-600 hover:bg-gray-700'
+            }`}
+          >
+            {isScreenSharing ? <StopCircle className="h-6 w-6" /> : <Monitor className="h-6 w-6" />}
           </button>
           <button
             onClick={toggleRemoteMute}
