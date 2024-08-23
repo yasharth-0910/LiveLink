@@ -15,7 +15,7 @@ const Receiver: React.FC = () => {
 
   // Initialize WebSocket connection
   useEffect(() => {
-    const ws = new WebSocket('ws://127.0.0.1:8787/ws');
+    const ws = new WebSocket('wss://backend-server.yasharthsingh0910.workers.dev/ws');
 
     ws.onopen = () => {
       ws.send(JSON.stringify({ type: "join", roomId, role: "receiver" }));
