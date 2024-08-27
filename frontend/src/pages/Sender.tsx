@@ -1,73 +1,56 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Video, Mic, MicOff, Camera, CameraOff, Volume2, VolumeX, PhoneOff, Users, Monitor, StopCircle } from 'lucide-react';
+import io, { Socket } from 'socket.io-client';
 
 const Sender: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const videoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [status, setStatus] = useState("Waiting for receiver...");
   const [micOn, setMicOn] = useState(false);
   const [cameraOn, setCameraOn] = useState(true);
   const [remoteMuted, setRemoteMuted] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [wsConnected, setWsConnected] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
 
-  const createWebSocket = () => {
-    if (webSocket) {
-      return;
-    }
-    const ws = new WebSocket('wss://backend-server.yasharthsingh0910.workers.dev/ws');
-    ws.onopen = () => {
-      console.log('WebSocket connection established');
-      ws.send(JSON.stringify({ type: "join", roomId, role: "sender" }));
-    };
-    ws.onmessage = (message) => {
-      const data = JSON.parse(message.data);
-      console.log("Received message:", data);
-      if (data.type === "status" && data.message === "Receiver connected") {
+  useEffect(() => {
+    const newSocket = io('http://localhost:8080');
+    setSocket(newSocket);
+
+    newSocket.on('connect', () => {
+      console.log('Socket connected');
+      newSocket.emit('join', { roomId, role: 'sender' });
+    });
+
+    newSocket.on('status', (data) => {
+      console.log('Received status:', data);
+      if (data.message === "Receiver connected") {
         setStatus("Receiver connected! Setting up connection...");
         createOffer();
-      } else if (data.type === "create-answer") {
-        peerConnection?.setRemoteDescription(new RTCSessionDescription(data.sdp));
-      } else if (data.type === "ice-candidate" && data.candidate) {
-        peerConnection?.addIceCandidate(new RTCIceCandidate(data.candidate));
       }
-    };
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
-    ws.onclose = () => {
-      console.log('WebSocket connection closed, retrying...');
-      setWebSocket(null);
-      setWsConnected(false);
-      setTimeout(createWebSocket, 1000);
-    };
-    setWebSocket(ws);
-  };
+    });
 
-  useEffect(() => {
-    if (!webSocket && !wsConnected) {
-      createWebSocket();
-      setWsConnected(true);
-    }
-    return () => {
-      if (webSocket) {
-        webSocket.close();
+    newSocket.on('ice-candidate', (data) => {
+      if (peerConnection && data.candidate) {
+        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
       }
+    });
+
+    return () => {
+      newSocket.disconnect();
     };
-  }, []);
+  }, [roomId]);
 
   const createOffer = async () => {
-    if (!peerConnection || !webSocket) return;
+    if (!peerConnection || !socket) return;
 
     try {
       const offer = await peerConnection.createOffer();
       await peerConnection.setLocalDescription(offer);
-      webSocket.send(JSON.stringify({ type: "sender-offer", sdp: offer }));
+      socket.emit('sender-offer', { roomId, sdp: offer });
     } catch (error) {
       console.error("Error creating offer:", error);
     }
@@ -97,7 +80,13 @@ const Sender: React.FC = () => {
       }
 
       const pc = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+          { urls: "stun:stun2.l.google.com:19302" },
+          { urls: "stun:stun3.l.google.com:19302" },
+          { urls: "stun:stun4.l.google.com:19302" },
+        ],
       });
 
       newStream.getTracks().forEach((track) => pc.addTrack(track, newStream));
@@ -109,8 +98,8 @@ const Sender: React.FC = () => {
       };
 
       pc.onicecandidate = (event) => {
-        if (event.candidate && webSocket) {
-          webSocket.send(JSON.stringify({ type: "ice-candidate", candidate: event.candidate, role: "sender" }));
+        if (event.candidate && socket) {
+          socket.emit('ice-candidate', { roomId, candidate: event.candidate, role: 'sender' });
         }
       };
 
@@ -141,8 +130,7 @@ const Sender: React.FC = () => {
 
   useEffect(() => {
     initWebRTC();
-  }, [webSocket]);
-
+  }, [socket]);
   const toggleMic = () => setMicOn((prev) => !prev);
   const toggleCamera = () => setCameraOn((prev) => !prev);
 
@@ -188,34 +176,34 @@ const Sender: React.FC = () => {
   };
 
   function endCall() {
-    if (peerConnection) {
-      peerConnection.close();
-      setPeerConnection(null);
-    }
-
-    if (webSocket) {
-      webSocket.close();
-      setWebSocket(null);
-    }
-
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      setStream(null);
-    }
-
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = null;
-    }
-
-    setStatus("Call ended");
-    
-    setTimeout(() => {
-      window.location.href = "/";
-    }, 2000);
+      if (peerConnection) {
+          peerConnection.close();
+          setPeerConnection(null);
+      }
+  
+      if (socket) {
+          socket.close();
+          setSocket(null);
+      }
+  
+      if (stream) {
+          stream.getTracks().forEach((track) => track.stop());
+          setStream(null);
+      }
+  
+      if (videoRef.current) {
+          videoRef.current.srcObject = null;
+      }
+  
+      if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = null;
+      }
+  
+      setStatus("Call ended");
+  
+      setTimeout(() => {
+          window.location.href = "/";
+      }, 2000);
   }
 
   return (
