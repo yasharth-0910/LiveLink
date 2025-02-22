@@ -15,70 +15,132 @@ const Sender: React.FC = () => {
   const [remoteMuted, setRemoteMuted] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-
   useEffect(() => {
-    const newSocket = io('http://localhost:8080');
-    setSocket(newSocket);
-
-    newSocket.on('connect', () => {
-      console.log('Socket connected');
-      newSocket.emit('join', { roomId, role: 'sender' });
-    });
-
-    newSocket.on('status', (data) => {
-      console.log('Received status:', data);
-      if (data.message === "Receiver connected") {
-        setStatus("Receiver connected! Setting up connection...");
-        createOffer();
+    let mounted = true;
+    let currentPeerConnection: RTCPeerConnection | null = null;
+    
+    const setupConnection = async () => {
+      try {
+        // Initialize WebRTC first and store the reference
+        currentPeerConnection = await initWebRTC();
+        
+        const newSocket = io('http://localhost:8787', {
+          transports: ['websocket', 'polling'],
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+          timeout: 60000,
+          forceNew: true
+        });
+        newSocket.on('connect_error', (error) => {
+          console.error('Connection Error:', error);
+        });
+        newSocket.on('connect', () => {
+          console.log('Socket connected');
+          newSocket.emit('join', { roomId, role: 'sender' });
+        });
+        newSocket.on('status', async (data) => {
+          console.log('Received status:', data);
+          if (data.message === "Receiver connected" && mounted) {
+            setStatus("Receiver connected! Setting up connection...");
+            
+            // Check if we need to reinitialize the connection
+            if (!currentPeerConnection || currentPeerConnection.signalingState === 'closed') {
+              console.log('Reinitializing WebRTC connection...');
+              currentPeerConnection = await initWebRTC();
+            }
+            // Create offer with the current connection
+            if (currentPeerConnection && currentPeerConnection.signalingState !== 'closed') {
+              try {
+                const offer = await currentPeerConnection.createOffer();
+                await currentPeerConnection.setLocalDescription(offer);
+                newSocket.emit('sender-offer', { roomId, sdp: offer });
+              } catch (error) {
+                console.error("Error creating offer:", error);
+                setStatus('Failed to create offer. Retrying connection...');
+                currentPeerConnection = await initWebRTC();
+              }
+            }
+          }
+        });
+        newSocket.on('ice-candidate', async (data) => {
+          if (peerConnection && data.candidate) {
+            try {
+              await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+              console.log('Added ICE candidate successfully');
+            } catch (error) {
+              console.error('Error adding ICE candidate:', error);
+            }
+          }
+        });
+        newSocket.on('sdp', async (data) => {
+          if (peerConnection && data.sdp) {
+            try {
+              await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+              console.log('Set remote description successfully');
+            } catch (error) {
+              console.error("Error setting remote description:", error);
+            }
+          }
+        });
+        if (mounted) {
+          setSocket(newSocket);
+        }
+      } catch (error) {
+        console.error('Error in setupConnection:', error);
+        if (mounted) {
+          setStatus('Failed to setup connection. Please try again.');
+        }
       }
-    });
-
-    newSocket.on('ice-candidate', (data) => {
-      if (peerConnection && data.candidate) {
-        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-      }
-    });
-
+    };
+    
+    setupConnection();
+    
     return () => {
-      newSocket.disconnect();
+      mounted = false;
+      if (socket) {
+        socket.disconnect();
+      }
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      if (currentPeerConnection) {
+        currentPeerConnection.close();
+      }
+      if (peerConnection) {
+        peerConnection.close();
+        setPeerConnection(null);
+      }
     };
   }, [roomId]);
-
-  const createOffer = async () => {
-    if (!peerConnection || !socket) return;
-
-    try {
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
-      socket.emit('sender-offer', { roomId, sdp: offer });
-    } catch (error) {
-      console.error("Error creating offer:", error);
-    }
-  };
-
   const initWebRTC = async () => {
-    if (peerConnection) {
-      return;
-    }
-
     try {
+      // Ensure proper cleanup of existing connection
+      if (peerConnection) {
+        peerConnection.close();
+        setPeerConnection(null);
+      }
       if (stream) {
         stream.getTracks().forEach((track) => track.stop());
       }
-
+      // Initialize media stream with both audio and video enabled
+      const constraints = { 
+        audio: true,  // Always initialize audio
+        video: true   // Always initialize video
+      };
       let newStream;
       if (isScreenSharing) {
         newStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
       } else {
-        const constraints = { audio: micOn, video: cameraOn };
         newStream = await navigator.mediaDevices.getUserMedia(constraints);
       }
+      // Set initial track states
+      newStream.getAudioTracks().forEach(track => track.enabled = micOn);
+      newStream.getVideoTracks().forEach(track => track.enabled = cameraOn);
+      
       setStream(newStream);
-
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
       }
-
       const pc = new RTCPeerConnection({
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
@@ -86,61 +148,54 @@ const Sender: React.FC = () => {
           { urls: "stun:stun2.l.google.com:19302" },
           { urls: "stun:stun3.l.google.com:19302" },
           { urls: "stun:stun4.l.google.com:19302" },
-        ],
+        ]
       });
-
-      newStream.getTracks().forEach((track) => pc.addTrack(track, newStream));
-
+      // Add all tracks to the peer connection
+      newStream.getTracks().forEach((track) => {
+        pc.addTrack(track, newStream);
+        console.log('Added local track:', track.kind);
+      });
       pc.ontrack = (event) => {
-        if (remoteVideoRef.current) {
+        console.log('Received remote track:', event.track.kind);
+        if (remoteVideoRef.current && event.streams[0]) {
           remoteVideoRef.current.srcObject = event.streams[0];
+          console.log('Set remote video source');
+          setStatus('Connected! Video stream established.');
         }
       };
-
       pc.onicecandidate = (event) => {
         if (event.candidate && socket) {
+          console.log('Sending ICE candidate');
           socket.emit('ice-candidate', { roomId, candidate: event.candidate, role: 'sender' });
         }
       };
-
+      pc.oniceconnectionstatechange = () => {
+        console.log('ICE Connection State:', pc.iceConnectionState);
+        if (pc.iceConnectionState === 'connected') {
+          setStatus('Connected! Video stream established.');
+        } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+          setStatus('Connection lost. Please try rejoining the room.');
+        }
+      };
+      pc.onsignalingstatechange = () => {
+        console.log('Signaling State:', pc.signalingState);
+      };
       setPeerConnection(pc);
+      return pc;
     } catch (error) {
-      console.error("Error accessing media devices.", error);
-      setIsScreenSharing(false);
+      console.error("Error in initWebRTC:", error);
+      setStatus('Failed to initialize WebRTC. Please check your camera/microphone permissions.');
+      throw error;
     }
   };
-
-  useEffect(() => {
-    if (peerConnection) {
-      if (stream) {
-        const audioTrack = stream.getAudioTracks()[0];
-        const videoTrack = stream.getVideoTracks()[0];
-
-        if (audioTrack) {
-          audioTrack.enabled = micOn;
-        }
-
-        if (videoTrack) {
-          videoTrack.enabled = cameraOn;
-        }
-      }
-      initWebRTC();
-    }
-  }, [micOn, cameraOn, isScreenSharing, peerConnection]);
-
-  useEffect(() => {
-    initWebRTC();
-  }, [socket]);
   const toggleMic = () => setMicOn((prev) => !prev);
   const toggleCamera = () => setCameraOn((prev) => !prev);
-
   const toggleRemoteMute = () => {
     setRemoteMuted((prev) => !prev);
     if (remoteVideoRef.current) {
       remoteVideoRef.current.muted = !remoteMuted;
     }
   };
-
   const toggleScreenShare = async () => {
     if (isScreenSharing) {
       if (stream) {
@@ -155,26 +210,12 @@ const Sender: React.FC = () => {
           videoRef.current.srcObject = screenStream;
         }
         setIsScreenSharing(true);
-
-        screenStream.getVideoTracks()[0].onended = () => {
-          setIsScreenSharing(false);
-          initWebRTC();
-        };
-
-        if (peerConnection) {
-          const senders = peerConnection.getSenders();
-          const videoSender = senders.find(sender => sender.track?.kind === 'video');
-          if (videoSender) {
-            videoSender.replaceTrack(screenStream.getVideoTracks()[0]);
-          }
-        }
       } catch (error) {
-        console.error("Error starting screen share:", error);
+        console.error("Error sharing screen:", error);
         setIsScreenSharing(false);
       }
     }
   };
-
   function endCall() {
       if (peerConnection) {
           peerConnection.close();
@@ -205,7 +246,6 @@ const Sender: React.FC = () => {
           window.location.href = "/";
       }, 2000);
   }
-
   return (
     <div className="h-screen bg-gray-900 text-gray-100 flex flex-col overflow-hidden">
       <header className="bg-gray-800/50 backdrop-blur-md border-b border-gray-700 p-4 flex-shrink-0">
@@ -220,8 +260,7 @@ const Sender: React.FC = () => {
           </div>
         </div>
       </header>
-
-      <main className="flex-grow flex flex-col md:flex-row p-4 space-y-4 md:space-y-0 md:space-x-4 overflow-hidden">
+  <main className="flex-grow flex flex-col md:flex-row p-4 space-y-4 md:space-y-0 md:space-x-4 overflow-hidden">
         <div className="flex-grow flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4 overflow-hidden">
           <div className="relative flex-grow min-h-0">
             <video
@@ -249,8 +288,7 @@ const Sender: React.FC = () => {
           </div>
         </div>
       </main>
-
-      <footer className="bg-gray-800/50 backdrop-blur-md border-t border-gray-700 p-4 flex-shrink-0">
+  <footer className="bg-gray-800/50 backdrop-blur-md border-t border-gray-700 p-4 flex-shrink-0">
         <div className="max-w-7xl mx-auto flex flex-wrap justify-center items-center gap-4">
           <button
             onClick={toggleMic}
